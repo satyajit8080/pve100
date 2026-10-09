@@ -1,0 +1,11 @@
+{
+  "version": "promotion-empty",
+  "generatedAt": null,
+  "baseline": "current",
+  "primary": "current",
+  "approvedFeatures": [],
+  "weights": {},
+  "calibration": null,
+  "dataset": { "size": 0, "labeledCount": 0, "dateRange": { "from": null, "to": null }, "insufficient": true },
+  "note": "INSUFFICIENT DATA — no out-of-sample history captured yet, so no shadow features are promoted. The validated score mirrors the current production score (delta 0). Run research/run-phase3.js on the VPS after the Phase 0 snapshot + signal capture has accumulated data; if it finds genuine, stable out-of-sample edge it rewrites this file with approvedFeatures + evidence-derived weights. Promotion to primary is a separate manual step."
+}

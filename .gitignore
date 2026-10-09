@@ -1,0 +1,22 @@
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+credentials/
+credentials.json
+
+# dependencies / build
+node_modules/
+
+# logs / runtime
+logs/
+*.log
+npm-debug.log*
+.DS_Store
+
+# local data
+*.local
+research-data/

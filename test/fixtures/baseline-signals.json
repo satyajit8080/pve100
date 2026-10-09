@@ -1,0 +1,117 @@
+{
+  "bull": {
+    "finalScore": 54,
+    "dir": "bull",
+    "tier": "Weak",
+    "optionsScore": 76,
+    "stockScore": 0,
+    "predictionMarketScore": null,
+    "pveFactor": 1,
+    "pveState": "unavailable",
+    "dataQuality": 100,
+    "primary": 54,
+    "agg": {
+      "gex": 4920000,
+      "gammaFlip": 95,
+      "maxPain": 95,
+      "cpVolRatio": 4.4186046511627906,
+      "cpOIRatio": 2.8358208955223883,
+      "volOIRatio": 0.9066147859922179,
+      "atmIV": 0.42,
+      "strikeConcentration": 0.35078502324032157,
+      "avgSpread": 0.05141727092946604
+    }
+  },
+  "bear": {
+    "finalScore": 54,
+    "dir": "bear",
+    "tier": "Weak",
+    "optionsScore": 76,
+    "stockScore": 0,
+    "predictionMarketScore": null,
+    "pveFactor": 1,
+    "pveState": "unavailable",
+    "dataQuality": 100,
+    "primary": 54,
+    "agg": {
+      "gex": -6200000,
+      "gammaFlip": null,
+      "maxPain": 105,
+      "cpVolRatio": 0.15121951219512195,
+      "cpOIRatio": 0.24390243902439024,
+      "volOIRatio": 0.9254901960784314,
+      "atmIV": 0.41750000000000004,
+      "strikeConcentration": 0.3548635140330642,
+      "avgSpread": 0.05141727092946604
+    }
+  },
+  "neutral": {
+    "finalScore": 0,
+    "dir": "neutral",
+    "tier": "Weak",
+    "optionsScore": 0,
+    "stockScore": 0,
+    "predictionMarketScore": null,
+    "pveFactor": 1,
+    "pveState": "unavailable",
+    "dataQuality": 100,
+    "primary": 0,
+    "agg": {
+      "gex": 0,
+      "gammaFlip": 105,
+      "maxPain": 100,
+      "cpVolRatio": 1,
+      "cpOIRatio": 1,
+      "volOIRatio": 0.75,
+      "atmIV": 0.41,
+      "strikeConcentration": 0.5,
+      "avgSpread": 0.08446455505279035
+    }
+  },
+  "sparse": {
+    "finalScore": 3,
+    "dir": "bear",
+    "tier": "Weak",
+    "optionsScore": 9,
+    "stockScore": 0,
+    "predictionMarketScore": null,
+    "pveFactor": 1,
+    "pveState": "unavailable",
+    "dataQuality": 50,
+    "primary": 6,
+    "agg": {
+      "gex": null,
+      "gammaFlip": null,
+      "maxPain": 50,
+      "cpVolRatio": 0.8333333333333334,
+      "cpOIRatio": 1.1111111111111112,
+      "volOIRatio": 0.5789473684210527,
+      "atmIV": null,
+      "strikeConcentration": 1,
+      "avgSpread": null
+    }
+  },
+  "withPrev": {
+    "finalScore": 88,
+    "dir": "bull",
+    "tier": "Very Strong",
+    "optionsScore": 90,
+    "stockScore": 83,
+    "predictionMarketScore": null,
+    "pveFactor": 1,
+    "pveState": "unavailable",
+    "dataQuality": 100,
+    "primary": 88,
+    "agg": {
+      "gex": 4920000,
+      "gammaFlip": 95,
+      "maxPain": 95,
+      "cpVolRatio": 4.4186046511627906,
+      "cpOIRatio": 2.8358208955223883,
+      "volOIRatio": 0.9066147859922179,
+      "atmIV": 0.42,
+      "strikeConcentration": 0.35078502324032157,
+      "avgSpread": 0.05141727092946604
+    }
+  }
+}

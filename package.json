@@ -1,0 +1,18 @@
+{
+  "name": "pve-signal-engine",
+  "version": "2.0.0",
+  "description": "Real-time combined-signal scanner built on the PVE.trade agent API, with a deterministic, tested signal engine.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "typecheck": "tsc --allowJs --checkJs --noEmit --module esnext --target es2022 public/engine.js || echo 'install typescript for full typecheck (JSDoc @ts-check annotations are already in place)'"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

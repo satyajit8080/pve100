@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PVE Signal Engine</title>
+<style>
+  :root{
+    --ink:#0b1015; --panel:#111a22; --panel2:#0e161d; --raise:#16212b;
+    --line:#1e2b36; --line2:#28394799;
+    --text:#e2eaf1; --muted:#8598a7; --dim:#5f7484;
+    --bull:#2fd6b0; --bull-d:#12463c; --bear:#ff6b6b; --bear-d:#4a2020;
+    --warn:#f4b740; --accent:#7c7bff; --accent-d:#2b2b5c;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --r:7px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--ui);font-size:13.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .muted{color:var(--muted)} .dim{color:var(--dim)}
+  .bull{color:var(--bull)} .bear{color:var(--bear)} .warn{color:var(--warn)}
+  button{font-family:inherit;cursor:pointer}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#22323e;border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---- layout ---- */
+  #app{display:none;grid-template-columns:212px 1fr;grid-template-rows:52px 1fr;height:100vh}
+  header{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0f1720,#0c141b)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--bull);box-shadow:0 0 0 0 var(--bull);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,214,176,.5)}70%{box-shadow:0 0 0 7px rgba(47,214,176,0)}100%{box-shadow:0 0 0 0 rgba(47,214,176,0)}}
+  header .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--muted);background:#0d151c}
+  .pill b{color:var(--text)}
+  .pill .s{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .pill.ok .s{background:var(--bull)} .pill.bad .s{background:var(--bear)} .pill.warnp .s{background:var(--warn)}
+  .modebtn{border:1px solid var(--line);background:#0d151c;color:var(--text);border-radius:999px;padding:4px 10px;font-size:11px}
+
+  nav{grid-row:2;border-right:1px solid var(--line);background:var(--panel2);padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+  nav .navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:0;color:var(--muted);padding:9px 11px;border-radius:6px;font-size:13px;font-weight:500}
+  nav .navbtn:hover{background:#14202a;color:var(--text)}
+  nav .navbtn.active{background:#16232f;color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
+  nav .navbtn .k{margin-left:auto;font-size:10px;color:var(--dim)}
+  nav .navbtn.spot.active{box-shadow:inset 2px 0 0 var(--bull)}
+  nav .foot{margin-top:auto;padding:10px 8px;font-size:10.5px;color:var(--dim);border-top:1px solid var(--line)}
+
+  main{grid-row:2;overflow:auto;padding:18px 20px 40px}
+  .maph{display:none;align-items:center;gap:10px;background:#0f1a24;border:1px solid var(--line);color:var(--muted);padding:8px 12px;border-radius:var(--r);margin-bottom:14px;font-size:12px}
+  .maph.show{display:flex}
+  .maph button{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font-size:11px}
+
+  .page{display:none} .page.active{display:block}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+  .card .hd{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .card .hd h3{margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .card .bd{padding:14px}
+  .grid{display:grid;gap:14px}
+  .kpi{padding:14px}
+  .kpi .lab{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .kpi .val{font-size:26px;font-weight:700;margin-top:4px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .kpi .sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+  td{padding:8px 10px;border-bottom:1px solid var(--line2)}
+  tr:hover td{background:#121d26}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+
+  /* ---- scanner ---- */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .chip{border:1px solid var(--line);background:#0d151c;color:var(--muted);border-radius:999px;padding:5px 11px;font-size:12px}
+  .chip.on{border-color:var(--accent);color:var(--text);background:#171733}
+  .chip.bull.on{border-color:var(--bull);background:#0f2a25;color:var(--bull)}
+  .chip.bear.on{border-color:var(--bear);background:#2a1414;color:var(--bear)}
+  input,select{background:#0c141b;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 9px;font-size:12.5px;font-family:inherit}
+  input:focus,select:focus,button:focus-visible,.navbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .scanhead{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .scanhead h2{margin:0;font-size:16px;letter-spacing:.02em}
+  .scanline{position:relative;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:200% 100%;border-radius:2px;flex:1;opacity:.7;animation:sweep 2.2s linear infinite}
+  @keyframes sweep{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  .siglist{display:grid;gap:10px}
+  .sig{display:grid;grid-template-columns:76px 1fr 150px 88px;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-left-width:3px;border-radius:var(--r);padding:12px 14px;cursor:pointer;transition:background .12s}
+  .sig:hover{background:#14202b}
+  .sig.b{border-left-color:var(--bull)} .sig.s{border-left-color:var(--bear)} .sig.n{border-left-color:var(--dim)}
+  .sig .rank{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--dim);text-align:center}
+  .sig .tkr{font-weight:700;font-size:15px}
+  .sig .ttl{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px}
+  .sig .tags{margin-top:3px;display:flex;gap:6px;flex-wrap:wrap}
+  .tag{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .dirbadge{font-size:10px;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:4px;display:inline-block}
+  .dirbadge.b{color:var(--bull);background:var(--bull-d)} .dirbadge.s{color:var(--bear);background:var(--bear-d)} .dirbadge.n{color:var(--muted);background:#1b2731}
+  .score{text-align:right}
+  .score .n{font-family:var(--mono);font-size:24px;font-weight:700}
+  .score .l{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .conv{height:8px;background:#0c141b;border:1px solid var(--line);border-radius:5px;position:relative;overflow:hidden}
+  .conv .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#33454f}
+  .conv .fill{position:absolute;top:0;bottom:0}
+  .conv .fill.b{left:50%;background:linear-gradient(90deg,#1c8f78,var(--bull))}
+  .conv .fill.s{right:50%;background:linear-gradient(270deg,#a83b3b,var(--bear))}
+  .cov{font-size:10px;color:var(--dim);margin-top:4px;display:flex;justify-content:space-between}
+
+  .comps{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .comp{font-size:10.5px;padding:2px 7px;border-radius:4px;border:1px solid var(--line);color:var(--dim);display:inline-flex;gap:5px;align-items:center}
+  .comp.ok{color:var(--text);border-color:#2a3a45}
+  .comp .m{width:6px;height:6px;border-radius:50%;background:var(--dim)}
+  .comp.up .m{background:var(--bull)} .comp.dn .m{background:var(--bear)} .comp.na{opacity:.5}
+
+  .empty{padding:40px;text-align:center;color:var(--dim);border:1px dashed var(--line);border-radius:var(--r)}
+  .sectlabel{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:18px 0 8px}
+
+  /* ---- modal ---- */
+  .modal{position:fixed;inset:0;background:rgba(4,8,11,.72);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
+  .modal.show{display:flex}
+  .sheet{width:100%;max-width:760px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .sheet .top{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .sheet .top .x{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;width:30px;height:30px;font-size:16px}
+  .sheet .body{padding:18px}
+  .dl{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 20px}
+  .dl .f .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .dl .f .v{font-family:var(--mono);font-size:14px;margin-top:2px}
+  .compbar{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;align-items:center;margin:7px 0}
+  .compbar .track{height:9px;background:#0c141b;border:1px solid var(--line);border-radius:5px;position:relative;overflow:hidden}
+  .compbar .track .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#33454f}
+  .compbar .track .f{position:absolute;top:0;bottom:0}
+
+  /* ---- settings ---- */
+  .setrow{display:grid;grid-template-columns:220px 1fr 80px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2)}
+  .setrow label{font-size:12.5px}
+  .setrow .hint{font-size:11px;color:var(--dim)}
+  input[type=range]{width:100%}
+  .btn{background:var(--accent);border:0;color:#fff;border-radius:6px;padding:8px 14px;font-weight:600;font-size:12.5px}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .disc{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-top:16px;line-height:1.5}
+
+  /* ---- json ---- */
+  pre.json{background:#0a1117;border:1px solid var(--line);border-radius:var(--r);padding:12px;max-height:520px;overflow:auto;font-family:var(--mono);font-size:11.5px;color:#cdd9e2;white-space:pre-wrap;word-break:break-word}
+  .st{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-family:var(--mono)}
+  .st.ok{color:var(--bull);background:var(--bull-d)} .st.err{color:var(--bear);background:var(--bear-d)} .st.warn{color:var(--warn);background:#2a2108}
+
+  /* ---- login ---- */
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(1200px 600px at 50% -10%,#12202b,#080d12)}
+  .lbox{width:340px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:26px}
+  .lbox .brand{justify-content:center;margin-bottom:4px;font-size:16px}
+  .lbox p{color:var(--dim);font-size:12px;text-align:center;margin:2px 0 18px}
+  .lbox input{width:100%;margin-bottom:10px;padding:10px}
+  .lbox .btn{width:100%;padding:11px}
+  .lerr{color:var(--bear);font-size:12px;text-align:center;min-height:16px;margin-top:8px}
+
+/* ===== Overview simulation ===== */
+.simWrap{position:relative;min-height:1100px}
+#simCanvas{position:absolute;inset:0;pointer-events:none;z-index:0}
+.simHead{position:relative;z-index:1;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px}
+.simTitle{margin:0;font-size:26px;letter-spacing:-.4px;background:linear-gradient(92deg,#e8ecff,#a78bfa 45%,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.simSub{margin:6px 0 0;color:var(--dim);font-size:13px}
+.simStatus{margin-left:auto;text-align:right}
+.simRun{display:flex;align-items:center;gap:7px;justify-content:flex-end;font-size:11px;letter-spacing:.09em;color:#34d399;font-family:var(--mono)}
+.simDot{width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 10px #34d399;animation:simPulse 1.6s infinite}
+.simDot.paused{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:none}
+@keyframes simPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.simStats{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;justify-content:flex-end}
+.simStats div{text-align:right}
+.simStats span{display:block;font-size:9.5px;letter-spacing:.07em;color:var(--dim);text-transform:uppercase}
+.simStats b{font-family:var(--mono);font-size:16px;color:var(--text)}
+.simDemoTag{margin-top:8px;font-size:9px;letter-spacing:.11em;color:var(--warn);opacity:.8;font-family:var(--mono)}
+.simControls{position:relative;z-index:1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.simToggle{background:rgba(120,140,190,.08);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:5px 13px;font-size:11.5px;cursor:pointer;transition:.18s}
+.simToggle.on{color:#a78bfa;border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.10)}
+.simHint{font-size:10.5px;color:var(--dim);margin-left:4px}
+.simGrid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
+.simStage{background:linear-gradient(165deg,rgba(20,26,46,.72),rgba(12,16,30,.62));backdrop-filter:blur(9px);border:1px solid var(--line);border-radius:14px;padding:14px;transition:.22s;cursor:pointer}
+.simStage:hover{border-color:rgba(167,139,250,.34)}
+.simStage.simOn{border-color:rgba(167,139,250,.65);box-shadow:0 0 0 1px rgba(167,139,250,.2),0 10px 40px -12px rgba(167,139,250,.5)}
+.simStage h3{margin:0 0 10px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.simStage h4{margin:0 0 6px;font-size:9.5px;letter-spacing:.07em;color:var(--dim);text-transform:uppercase}
+.simEngine{grid-column:span 1;grid-row:span 2}
+.simSrc{border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:7px;background:rgba(10,14,26,.5)}
+.simSrcHead{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text);margin-bottom:5px}
+.simSrcHead i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.simFeedLines{min-height:34px}
+.simPacket{font-family:var(--mono);font-size:10.5px;opacity:.9;animation:simIn .4s ease-out;line-height:1.5}
+@keyframes simIn{from{opacity:0;transform:translateX(-8px)}to{opacity:.9;transform:none}}
+.simFeat{display:flex;align-items:center;gap:8px;font-size:11px;padding:2.5px 0}
+.simFeatName{flex:0 0 108px;color:var(--dim);font-size:10.5px}
+.simFeatBar{flex:1;font-family:var(--mono);font-size:9px;letter-spacing:-1px;overflow:hidden;white-space:nowrap}
+.simFeatVal{font-family:var(--mono);width:22px;text-align:right;color:var(--text)}
+.simRingWrap{position:relative;width:180px;margin:4px auto 8px}
+.simRing{width:180px;height:180px;display:block}
+.simRingBg{fill:none;stroke:rgba(120,140,190,.13);stroke-width:9}
+.simRingFg{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dasharray .5s ease,stroke .5s ease;filter:drop-shadow(0 0 7px currentColor)}
+.simRingCenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.simRingLabel{font-size:8.5px;letter-spacing:.15em;color:var(--dim)}
+.simScoreNum{font-family:var(--mono);font-size:46px;line-height:1;color:var(--text)}
+.simScoreTier{font-size:9px;letter-spacing:.12em;margin-top:3px}
+.simMath{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;font-size:10.5px;color:var(--dim);margin-bottom:10px}
+.simMath b{font-family:var(--mono);color:var(--text);font-size:13px;margin-left:4px}
+.simMath i{opacity:.45;font-style:normal}
+.simMathSum b{color:#34d399}
+.simSplit{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.simComp{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);padding:1.5px 0}
+.simComp i{font-family:var(--mono);font-style:normal;color:var(--text)}
+.simSigCard{border:1px solid rgba(52,211,153,.3);border-radius:11px;padding:12px;background:linear-gradient(165deg,rgba(52,211,153,.09),rgba(12,16,30,.5))}
+.simSigCard.bearish{border-color:rgba(248,113,113,.3);background:linear-gradient(165deg,rgba(248,113,113,.09),rgba(12,16,30,.5))}
+.simFlash{animation:simFlash .85s ease-out}
+@keyframes simFlash{0%{transform:scale(.96);box-shadow:0 0 0 0 rgba(52,211,153,.5)}100%{transform:none;box-shadow:0 0 0 22px rgba(52,211,153,0)}}
+.simSigTop{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.simSigBadge{font-size:8.5px;letter-spacing:.13em;color:#34d399;border:1px solid rgba(52,211,153,.4);border-radius:4px;padding:2px 6px}
+.simSigTime{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.simSigTicker{font-size:28px;font-weight:600;letter-spacing:-.5px}
+.simSigContract{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:5px}
+.simSigScore{font-size:10.5px;color:var(--dim)}.simSigScore b{font-family:var(--mono);font-size:17px;color:var(--text);margin-left:4px}
+.simSigDir{font-size:13px;font-weight:600;margin:5px 0 8px}
+.simSigGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.simSigGrid span{display:block;font-size:9px;letter-spacing:.06em;color:var(--dim);text-transform:uppercase}
+.simSigGrid b{font-family:var(--mono);font-size:12.5px}
+.simWhy summary{font-size:9.5px;letter-spacing:.1em;color:var(--dim);cursor:pointer}
+.simWhy ul{margin:6px 0 0;padding-left:16px}
+.simWhy li{font-size:11px;color:var(--text);opacity:.85;padding:1px 0}
+.simIdle{font-size:11.5px;color:var(--dim);padding:14px;text-align:center;border:1px dashed var(--line);border-radius:9px}
+.simJmeta{font-size:9px;color:var(--dim);opacity:.7;margin-bottom:7px;letter-spacing:.04em}
+.simJrow{display:flex;align-items:center;gap:9px;font-size:11px;padding:5px 0;border-top:1px solid var(--line);cursor:pointer;animation:simIn .4s}
+.simJrow:hover{background:rgba(167,139,250,.06)}
+.simJt{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.simJs{font-family:var(--mono);margin-left:auto}
+.simPerfHead{display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:9px}
+.simPerfHead span{margin-left:auto;font-size:10px;letter-spacing:.1em}
+.simTimeline{display:flex;align-items:center;gap:3px;margin-bottom:9px;flex-wrap:wrap}
+.simMark{text-align:center;animation:simIn .5s both}
+.simMark span{display:block;font-size:8px;letter-spacing:.06em;color:var(--dim)}
+.simMark b{font-family:var(--mono);font-size:12px}
+.simTick{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);min-width:8px}
+.simMfe{display:flex;gap:14px;font-size:10.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:7px}
+.simMfe b{font-family:var(--mono)}
+.simImpacts{margin-top:9px;border-top:1px solid var(--line);padding-top:7px}
+.simImpact{display:flex;justify-content:space-between;font-size:10.5px;padding:2px 0;color:var(--dim)}
+.simImpact b{font-size:9.5px;letter-spacing:.06em}
+.simLoopNote{margin-top:9px;font-size:10px;color:#fbbf24;opacity:.8;text-align:center;letter-spacing:.04em}
+@media(max-width:1100px){.simGrid{grid-template-columns:1fr 1fr}.simEngine{grid-row:span 1}}
+@media(max-width:760px){.simGrid{grid-template-columns:1fr}.simWrap{min-height:0}.simStatus{margin-left:0;text-align:left}.simStats{justify-content:flex-start}.simRun{justify-content:flex-start}.simTitle{font-size:21px}.simSplit{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="lbox">
+    <div class="brand"><span class="dot"></span> PVE SIGNAL ENGINE</div>
+    <p>Enter password to continue</p>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" />
+    <button class="btn" id="loginBtn">Unlock</button>
+    <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="brand"><span class="dot"></span> PVE SIGNAL ENGINE</div>
+    <div class="spacer"></div>
+    <span class="pill" id="pillConn"><span class="s"></span><span id="connTxt">connecting…</span></span>
+    <span class="pill" id="pillData"><span class="s"></span>src: <b id="srcTxt">—</b></span>
+    <span class="pill" id="pillScan"><span class="s"></span>scan <b id="scanTxt">—</b></span>
+    <button class="modebtn" id="logoutBtn">Logout</button>
+  </header>
+
+  <nav>
+    <div class="navhdr" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin:6px 10px 2px">Signal Terminal · US only</div>
+    <button class="navbtn active" data-tab="dashboard">Overview</button>
+    <button class="navbtn spot" data-tab="scanner">Fast US Stock Signals <span class="k">core</span></button>
+    <button class="navbtn spot" data-tab="signals">US Options Signals <span class="k">live</span></button>
+    <button class="navbtn" data-tab="options">US Options</button>
+    <button class="navbtn" data-tab="backtest">Backtest</button>
+    <button class="navbtn" data-tab="replay">Replay</button>
+    <button class="navbtn" data-tab="research">Feature Research</button>
+    <button class="navbtn" data-tab="history">Signal History</button>
+    <button class="navbtn spot" data-tab="journal">Signal Journal <span class="k">learning</span></button>
+    
+    <div class="navhdr" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin:12px 10px 2px">System</div>
+    <button class="navbtn" data-tab="monitor">Raw API / Data Monitor</button>
+    <button class="navbtn" data-tab="health">System Health</button>
+    <button class="navbtn" data-tab="settings">API Configuration</button>
+    <div class="foot">Unusual Whales options data.<br>Scores = ranking, not P(profit).<br>Not financial advice.</div>
+  </nav>
+
+  <main>
+    <div class="maph" id="maph">
+      <span>Signals are built from <b>Unusual Whales</b> options data only: real chains, Greeks, IV, OI, signed flow and intraday GEX. No other market-data provider is used.</span>
+      <button id="maphX">dismiss</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section class="page active" data-page="dashboard">
+      <div id="overviewSim"></div>
+    </section>
+
+    <!-- MARKETS -->
+
+    <!-- FLOW -->
+
+    <!-- SCANNER -->
+    <section class="page" data-page="scanner">
+      <div class="scanhead"><h2>Fast Signal Scanner</h2><div class="scanline"></div><span class="dim mono" id="scanCount"></span></div>
+      <div class="toolbar">
+        <span class="chip on" data-thr="0">All</span>
+        <span class="chip" data-thr="70">70%+</span>
+        <span class="chip" data-thr="75">75%+</span>
+        <span class="chip" data-thr="80">80%+</span>
+        <span class="chip" data-thr="85">85%+</span>
+        <span class="chip" data-thr="90">90%+</span>
+        <span style="width:8px"></span>
+        <span class="chip bull" data-side="bull">Bullish</span>
+        <span class="chip bear" data-side="bear">Bearish</span>
+        <input id="scanFilter" placeholder="ticker / market…" style="width:180px;margin-left:auto" />
+        <input id="scanMinVol" type="number" placeholder="min vol" style="width:100px" />
+      </div>
+      <div id="scanHi"></div>
+      <div class="sectlabel" id="scanAllLabel">All ranked signals</div>
+      <div class="siglist" id="scanAll"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="page" data-page="history">
+      <div class="toolbar">
+        <span class="dim" id="histMeta"></span>
+        <span style="flex:1"></span>
+        <button class="btn ghost" id="histExport">Export CSV</button>
+        <button class="btn ghost" id="histClear">Clear</button>
+      </div>
+      <div class="card"><div class="bd" style="padding:0"><div id="histTable"></div></div></div>
+    </section>
+
+    <!-- BACKTEST -->
+    <section class="page" data-page="backtest">
+      <p class="muted" style="margin-top:0;font-size:12.5px">Outcomes are measured from live-captured prices after each signal fires (no future data used at signal time). Fills in as time passes and your history grows.</p>
+      <div class="toolbar">
+        <span class="chip on" data-bt="all">All history</span>
+        <span class="chip" data-bt="train">In-sample (70%)</span>
+        <span class="chip" data-bt="test">Out-of-sample (30%)</span>
+        <span class="dim" id="btSplitMeta" style="margin-left:auto;font-size:11px"></span>
+      </div>
+      <div class="card"><div class="hd"><h3>Performance by score bucket</h3></div><div class="bd" style="padding:0"><div id="btBuckets"></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Walk-forward stability (1h)</h3><span class="dim" style="margin-left:auto;font-size:11px">metric across sequential time folds</span></div><div class="bd" style="padding:0"><div id="btWalk"></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Evaluated signals</h3></div><div class="bd" style="padding:0"><div id="btTable"></div></div></div>
+    </section>
+
+    <!-- FEATURE RESEARCH -->
+    <section class="page" data-page="research">
+      <p class="muted" style="margin-top:0;font-size:12.5px">Which features — and which combinations — actually precede favourable moves in your captured history. A feature "fires" when it is present, strong, and (if directional) aligned with the signal. Read against the baseline; small samples mean nothing.</p>
+      <div class="card"><div class="hd"><h3>Per-feature forward performance</h3><span class="dim" id="fpMeta" style="margin-left:auto;font-size:11px"></span></div><div class="bd" style="padding:0"><div id="fpTable"></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Feature combinations (does stacking add value?)</h3></div><div class="bd" style="padding:0"><div id="fpCombos"></div></div></div>
+    </section>
+
+    <!-- US STOCK SIGNALS -->
+
+    <!-- US OPTIONS SIGNALS (ranked scan: production + shadow) -->
+    <section class="page" data-page="signals">
+      <div class="scanhead"><h2>US Options Signals</h2><div class="scanline"></div><span class="dim mono" id="sigMeta"></span></div>
+      <p class="muted" style="margin-top:0;font-size:12.5px">Ranked by the <b>production</b> options score (the live authority). The <b>shadow</b> score is validation-only and never changes it. <b>Confidence</b> is a data/conviction measure, not a probability of profit. Auto-refreshed every 5 min during US market hours; click any row for the full options breakdown. Scores here are the <b>last scan snapshot</b>; opening a ticker recomputes it <b>live</b>, so the two can differ slightly.</p>
+      <div class="toolbar">
+        <span class="chip on" data-sigthr="0">All</span>
+        <span class="chip" data-sigthr="70">70+</span>
+        <span class="chip" data-sigthr="80">80+</span>
+        <span class="chip" data-sigthr="90">90+</span>
+        <span style="width:10px"></span>
+        <span class="chip" data-sigside="bull">Bullish</span>
+        <span class="chip" data-sigside="bear">Bearish</span>
+        <input id="sigSearch" placeholder="ticker…" style="width:120px;text-transform:uppercase" />
+        <span class="dim mono" id="scanStatus" style="margin-left:auto;font-size:11px"></span><button class="btn" id="sigRunScan" style="margin-left:10px">Run Scan</button><button class="btn ghost" id="sigRefresh" style="margin-left:6px">Refresh</button>
+      </div>
+      <div id="sigTop" style="margin:10px 0"></div>
+      <div id="sigStatus" class="dim" style="font-size:12px"></div>
+      <div id="sigTable" style="margin-top:8px;overflow-x:auto"></div>
+    </section>
+
+    <!-- US OPTIONS (REAL, UNUSUAL WHALES) -->
+    <section class="page" data-page="options">
+      <div class="scanhead"><h2>US Options Signals · Unusual Whales</h2><div class="scanline"></div><span class="dim mono" id="optMeta"></span></div>
+      <p class="muted" style="margin-top:0;font-size:12.5px">Real options chain + Greeks + IV + OI from <b>Unusual Whales</b> are the only signal inputs. GEX / gamma-flip / walls are computed from the real chain. Nothing is fabricated: missing fields show as unavailable.</p>
+      <div class="toolbar">
+        <input id="optTicker" placeholder="ticker e.g. AAPL" value="AAPL" style="width:150px;text-transform:uppercase" />
+        <button class="btn" id="optGo">Analyze</button>
+        <span class="dim" id="optStatus" style="margin-left:auto;font-size:11px"></span>
+      </div>
+      <div id="optSummary"></div>
+      <div class="card" style="margin-top:14px;border-color:#4a3a6a;background:rgba(150,110,255,.05)"><div class="hd"><h3>🧠 AI Analysis <span class="dim" style="font-weight:400">· advisory</span></h3>
+        <button class="btn" id="aiRun" style="margin-left:auto">Run AI Analysis</button></div>
+        <div class="bd"><div class="dim" style="font-size:11.5px;margin-bottom:8px">Multi-agent research (flow · positioning · technical · news → bull/bear → risk → summary). <b>Advisory only — does not affect the Signal Score.</b></div>
+        <div id="aiStatus" class="dim" style="font-size:12px"></div><div id="aiOut" style="margin-top:8px"></div></div>
+      </div>
+      <div class="card" style="margin-top:14px;border-color:#3a5a4a;background:rgba(90,200,150,.05)"><div class="hd"><h3>🔬 Shadow features <span class="dim" style="font-weight:400">· research</span></h3>
+        <span class="mono" style="margin-left:10px;font-size:10px;padding:2px 8px;border:1px solid #3a5a4a;border-radius:10px;color:#7dd6a8">NOT USED IN LIVE SCORE</span>
+        <button class="btn" id="shadowRun" style="margin-left:auto">Compute Shadow</button></div>
+        <div class="bd"><div class="dim" style="font-size:11.5px;margin-bottom:8px">Phase 1 shadow engine (GEX regime · ΔGEX · flow quality · IV/skew/VRP · flow-vs-price). <b>Observation only — never affects the Signal Score.</b> Weights provisional, pending validation.</div>
+        <div id="shadowStatus" class="dim" style="font-size:12px"></div><div id="shadowOut" style="margin-top:8px"></div></div>
+      </div>
+      <div class="card" style="margin-top:14px;border-color:#4a4a6a;background:rgba(140,150,220,.05)"><div class="hd"><h3>🧪 Validated score <span class="dim" style="font-weight:400">· research</span></h3>
+        <span class="mono" style="margin-left:10px;font-size:10px;padding:2px 8px;border:1px solid #4a4a6a;border-radius:10px;color:#a8b0e6">CURRENT REMAINS PRIMARY</span>
+        <button class="btn" id="validatedRun" style="margin-left:auto">Compute Validated</button></div>
+        <div class="bd"><div class="dim" style="font-size:11.5px;margin-bottom:8px">Phase 4 evidence-driven model shown <b>alongside</b> the live score. Promotes only features that passed Phase 3 out-of-sample validation. Until then, validated = current (delta 0). Probability is shown only if calibration is validated.</div>
+        <div id="validatedStatus" class="dim" style="font-size:12px"></div><div id="validatedOut" style="margin-top:8px"></div></div>
+      </div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Options features (real chain)</h3></div><div class="bd" style="padding:0"><div id="optFeatures"></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Option chain — top by volume</h3><span class="dim" style="margin-left:auto;font-size:11px">source shown above</span></div><div class="bd" style="padding:0;max-height:420px;overflow:auto"><div id="optChain"></div></div></div>
+    </section>
+
+    <!-- REPLAY -->
+    <section class="page" data-page="replay">
+      <p class="muted" style="margin-top:0;font-size:12.5px">Every signal persists its raw normalized input snapshot (features, score, tier, direction, engine + classifier version). Replay reproduces the identical signal deterministically from that snapshot — <b>without calling Unusual Whales</b>.</p>
+      <div class="card"><div class="hd"><h3>Deterministic replay</h3><span class="dim" id="rpMeta" style="margin-left:auto;font-size:11px"></span></div><div class="bd" style="padding:0"><div id="rpTable"></div></div></div>
+    </section>
+
+    <!-- SYSTEM HEALTH -->
+    <section class="page" data-page="health">
+      <p class="muted" style="margin-top:0;font-size:12.5px">Live Unusual Whales connectivity and engine state. This system is LIVE ONLY — no demo or synthetic data is ever shown.</p>
+      <div class="card"><div class="hd"><h3>Status</h3></div><div class="bd" style="padding:0"><div id="healthTable"></div></div></div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>Rejected market reasons (last fetch)</h3></div><div class="bd" style="padding:0"><div id="healthReasons"></div></div></div>
+    </section>
+
+    <!-- CLAUDE REVIEW (research archive — read-only) -->
+    <section class="page" data-page="journal">
+      <div class="scanhead"><h2>Signal Journal</h2><div class="scanline"></div><span class="dim mono" id="jrMeta"></span></div>
+      <p class="muted" style="margin-top:0;font-size:12.5px">Every signal rated <b>&ge;70</b> is recorded permanently with the exact inputs the engine saw, why it fired, and what happened next. Outcomes are appended separately &mdash; original signal data is never overwritten. <b>Observation only:</b> nothing here changes live engine weights.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <span class="chip" data-jr="dash">Dashboard</span><span class="chip" data-jr="signals">Signals</span><span class="chip" data-jr="learning">Learning</span><span class="chip" data-jr="eval">Baseline Evaluation</span><span class="chip" data-jr="ready">Research Status</span>
+        <span class="dim mono" id="jrResolveStatus" style="margin-left:auto;font-size:11px"></span>
+        <button class="btn" id="jrResolve" style="margin-left:8px">Resolve Outcomes</button>
+      </div>
+      <div id="jrBody"></div>
+    </section>
+
+
+
+
+    <!-- MONITOR -->
+    <section class="page" data-page="monitor">
+      <div class="card" style="margin-bottom:12px"><div class="bd" style="padding:10px 14px;font-size:12px" id="monMeta"></div></div>
+      <div class="row">
+        <div class="card" style="flex:2;min-width:460px">
+          <div class="hd"><h3>Recent API calls</h3><button class="btn ghost" id="monRefresh" style="margin-left:auto;padding:4px 10px">Refresh</button></div>
+          <div class="bd" style="padding:0;max-height:420px;overflow:auto"><div id="monTable"></div></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <div class="hd"><h3>Raw / normalized</h3>
+            <select id="monEndpoint" style="margin-left:auto"></select>
+          </div>
+          <div class="bd">
+            <div class="toolbar" style="margin-bottom:8px"><span class="chip on" data-view="raw">raw</span><span class="chip" data-view="normalized">normalized</span></div>
+            <pre class="json" id="monJson">select an endpoint</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" data-page="settings">
+      <div class="scanhead"><h2>API Configuration</h2><div class="scanline"></div><span class="dim mono" id="apiMeta"></span></div>
+      <div class="card" style="border-color:#3a4a6a;background:rgba(90,130,255,.06);margin-bottom:12px"><div class="bd" style="padding:10px 14px;font-size:12.5px;line-height:1.5">
+        <b style="color:#8ab4ff">🔐 Keys are server-side only.</b> API keys live in <span class="mono">.env</span> on the server and are never sent to the browser. This panel shows <b>status</b> (set / not-set) and lets you <b>test</b> endpoints — it never displays or accepts secret values. To add/remove keys, edit <span class="mono">/opt/pve-signal-engine/.env</span> and restart the service.
+      </div></div>
+      <div class="row">
+        <div class="card" style="flex:1;min-width:340px">
+          <div class="hd"><h3>Connection status</h3><button class="btn ghost" id="apiRefresh" style="margin-left:auto;padding:4px 10px">Refresh</button></div>
+          <div class="bd" style="padding:0"><div id="apiStatus"></div></div>
+        </div>
+        <div class="card" style="flex:1;min-width:340px">
+          <div class="hd"><h3>Configuration (.env) — add / remove on server</h3></div>
+          <div class="bd" style="padding:0"><div id="apiEnv"></div></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px"><div class="hd"><h3>API endpoints</h3><span class="dim" style="margin-left:auto;font-size:11px">click Test to call (auth via your session)</span></div><div class="bd" style="padding:0"><div id="apiEndpoints"></div></div></div>
+
+      <div class="row" style="margin-top:14px">
+        <div class="card" style="flex:1;min-width:420px">
+          <div class="hd"><h3>Signal component weights</h3><span class="dim" style="margin-left:auto;font-size:11px" id="wsum"></span></div>
+          <div class="bd" id="weights"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:320px">
+          <div class="hd"><h3>Engine</h3></div>
+          <div class="bd" id="engineSettings"></div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn" id="setSave">Save</button>
+        <button class="btn ghost" id="setReset">Reset defaults</button>
+        <span class="dim" id="setMsg" style="align-self:center"></span>
+      </div>
+      <div class="disc">
+        <b>How the score works.</b> Each component is computed only from Unusual Whales data and returns a signed direction × strength.
+        Net = weighted average of available directional components. <b>Signal Score = |Net| × data-coverage × 100</b> — high scores need
+        multiple real signals to agree <i>and</i> enough data present. It is a ranking/confidence score, <b>not</b> a probability of profit,
+        and nothing here is financial advice. Prediction-market analogs (Outcome Pressure ≈ PCR, Liquidity/Depth ≈ OI) are labelled honestly;
+        no option chain is invented.
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
