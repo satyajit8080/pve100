@@ -23,10 +23,28 @@ function readJsonl(file) {
   return out;
 }
 
+// Parsed-journal cache keyed on (dir, file names + mtimes + sizes): re-parse only when a file changes.
+// Consumers must treat the returned records as read-only.
+const _cache = new Map(); // dir -> { fp, list }
+function fingerprint(dir, files) {
+  const parts = [];
+  for (const f of files) { try { const st = fs.statSync(path.join(dir, f)); parts.push(`${f}:${st.mtimeMs}:${st.size}`); } catch { parts.push(`${f}:x`); } }
+  return parts.join('|');
+}
+
 // Read all signal records, merge any outcome patches. First write of an id wins (dedupe).
 export function readJournal(dir = journalDir()) {
   let files = [];
-  try { files = fs.readdirSync(dir); } catch { return []; }
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort(); } catch { return []; }
+  const fp = fingerprint(dir, files);
+  const hit = _cache.get(dir);
+  if (hit && hit.fp === fp) return hit.list;
+  const list = parseJournal(dir, files);
+  _cache.set(dir, { fp, list });
+  return list;
+}
+
+function parseJournal(dir, files) {
   const signals = new Map();
   for (const f of files.filter((f) => f.startsWith('signal-log-') && f.endsWith('.jsonl')).sort()) {
     for (const r of readJsonl(path.join(dir, f))) {
@@ -54,7 +72,7 @@ export function readJournal(dir = journalDir()) {
 }
 
 export function readSignal(id, dir = journalDir()) {
-  return readJournal(dir).find((r) => r.id === id) || null;
+  return readJournal(dir).find((r) => r.id === id) || null;   // served from the parse cache
 }
 
 // Append an outcome patch. NEVER rewrites the signal file.

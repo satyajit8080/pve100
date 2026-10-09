@@ -320,7 +320,17 @@ function resolveMode() { return 'live'; } // demo mode removed — always live
 //  APP
 // =============================================================================
 const app = express();
+app.disable('x-powered-by');
+if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
 app.use(express.json({ limit: '256kb' }));
+// Secure flag whenever the request arrived over HTTPS (directly, or via a trusted proxy).
+const secureAttr = (req) => (req.secure ? '; Secure' : '');
 
 // Brute-force guard: max 10 failed logins per IP per 15 min.
 const LOGIN_FAILS = new Map();
@@ -336,10 +346,10 @@ app.post('/auth/login', (req, res) => {
   }
   LOGIN_FAILS.delete(ip);
   const token = signSession(Date.now() + CONFIG.SESSION_TTL_MS);
-  res.setHeader('Set-Cookie', `pve_sess=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CONFIG.SESSION_TTL_MS / 1000)}`);
+  res.setHeader('Set-Cookie', `pve_sess=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CONFIG.SESSION_TTL_MS / 1000)}${secureAttr(req)}`);
   res.json({ ok: true, live: !!CONFIG.AGENT_KEY });
 });
-app.post('/auth/logout', (req, res) => { res.setHeader('Set-Cookie', 'pve_sess=; HttpOnly; Path=/; Max-Age=0'); res.json({ ok: true }); });
+app.post('/auth/logout', (req, res) => { res.setHeader('Set-Cookie', `pve_sess=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureAttr(req)}`); res.json({ ok: true }); });
 app.get('/auth/status', (req, res) => res.json({ authed: authed(req), live: !!CONFIG.AGENT_KEY, baseUrl: CONFIG.BASE_URL, options: optionsProviderStatus(process.env) }));
 
 // §18 — the PVE Trade agent API has been REMOVED. UW is the only external market-data source.
@@ -415,7 +425,7 @@ async function persistAiRun(ticker, rec) {
 function isNumS(x) { return typeof x === 'number' && Number.isFinite(x); }
 
 // Shared: build the deterministic options signal for a ticker (used by /api/options and /api/ai).
-async function buildTickerSignal(ticker) {
+async function buildTickerSignal(ticker, { log = true } = {}) {
   if (OPT_PROVIDER.name === 'null') return { ok: false, error: OPT_PROVIDER.reason || 'No options provider configured', signal: null, chain: null };
   const c = await OPT_PROVIDER.getChain(ticker, { limit: 250 });
   const chain = c.chain;
@@ -511,8 +521,7 @@ async function buildTickerSignal(ticker) {
     let _sector = { state: 'UNAVAILABLE' };
     try {
       if (Date.now() - SECTOR_TIDE.at > 5 * 60000 && OPT_PROVIDER.getSectorTide) { SECTOR_TIDE.data = await OPT_PROVIDER.getSectorTide(); SECTOR_TIDE.at = Date.now(); }
-      let secName = null;
-      try { const comp = await OPT_PROVIDER.getCompanies([ticker]); secName = comp && comp[ticker] ? comp[ticker].sector : null; } catch (e) { secName = null; }
+      const secName = await sectorFor(ticker);
       _sector = sectorRelativeStrength({ ticker, sector: secName, sectorTide: SECTOR_TIDE.data, marketTide: null });
     } catch (e) { _sector = { state: 'UNAVAILABLE', reason: 'SECTOR_LOOKUP_FAILED' }; }
     READINESS.rvol = rvolReadiness({ baselines: BASELINES, ticker, bucket: _flags.timeBucket, rvolResult: _rvol });
@@ -546,7 +555,7 @@ async function buildTickerSignal(ticker) {
     }
   } catch (e) { sig.v2 = { error: e.message, note: 'shadow path failed; production unaffected' }; }
 
-  void logSignal({ provider: OPT_PROVIDER, ticker, sig, scoredAgg, underlying: chain.underlying || null, prevHadSnapshot: !!prev.agg, now: new Date(), entryOption, vsVwapPct: _vsVwap, changePct: _chg, atr: _atr, vwap: isNumS(vwap) ? vwap : null, v2: sig.v2 || null });
+  if (log) void logSignal({ provider: OPT_PROVIDER, ticker, sig, scoredAgg, underlying: chain.underlying || null, prevHadSnapshot: !!prev.agg, now: new Date(), entryOption, vsVwapPct: _vsVwap, changePct: _chg, atr: _atr, vwap: isNumS(vwap) ? vwap : null, v2: sig.v2 || null });
   return { ok: true, signal: sig, chain };
 }
 
@@ -737,6 +746,19 @@ const MARKET_CTX = new MarketContext(OPT_PROVIDER);   // SPY/QQQ fetched once pe
 const IV_SKEW = new IvSkewTracker();
 const EARNINGS = new EarningsCalendar(OPT_PROVIDER);
 const SECTOR_TIDE = { data: null, at: 0 };
+// ticker -> { sector, at }. Sector rarely changes; avoid one UW call per signal build. Failures not cached.
+const SECTOR_CACHE = new Map();
+const SECTOR_TTL_MS = 24 * 3600000;
+async function sectorFor(ticker) {
+  const hit = SECTOR_CACHE.get(ticker);
+  if (hit && Date.now() - hit.at < SECTOR_TTL_MS) return hit.sector;
+  try {
+    const comp = await OPT_PROVIDER.getCompanies([ticker]);
+    const sector = comp && comp[ticker] ? comp[ticker].sector : null;
+    if (sector) { if (SECTOR_CACHE.size > 5000) SECTOR_CACHE.clear(); SECTOR_CACHE.set(ticker, { sector, at: Date.now() }); }
+    return sector;
+  } catch { return null; }
+}
 const READINESS = { rvol: null, ivSkew: null, sector: null };
 
 const SCAN_STATE = { running: false, startedAt: null, finishedAt: null, lastOk: null, message: '', limit: null };
@@ -836,26 +858,42 @@ app.get('/api/journal/evaluation', requireAuth, (req, res) => {
 });
 app.get('/api/journal/resolve/status', requireAuth, (req, res) => res.json({ ok: true, ...RESOLVE_STATE }));
 // PHASE 4 validated ranking across the (cross-section) universe. Bounded; current stays primary.
+// Cached per limit: each build costs ~10+ UW calls per ticker, so recompute at most every RANKING_TTL_MS
+// and share one in-flight computation. Ranking builds are NOT journaled — they are not user signals.
+const RANKING_TTL_MS = 5 * 60000;
+const rankingCache = new Map(); // topN -> { at, body, inflight }
 app.get('/api/validated/ranking', requireAuth, async (req, res) => {
   if (OPT_PROVIDER.name === 'null') return res.json({ ok: false, error: 'Requires a configured options provider (set OPTIONS_PROVIDER + key).' });
+  const topN = Math.max(1, Math.min(50, Number(req.query.limit) || 25));
+  const c = rankingCache.get(topN) || {};
+  if (c.body && Date.now() - c.at < RANKING_TTL_MS) return res.json({ ...c.body, cached: true });
   try {
-    const xs = await buildLiteCrossSection();
-    if (!xs.available) return res.json({ ok: true, available: false, reason: 'No cross-sectional universe yet.', ranked: [] });
-    const ranks = computeCrossSectional(xs.records, XSEC_FEATURES, { absKeys: XSEC_ABS, compositeKeys: XSEC_FEATURES });
-    const topN = Math.max(1, Math.min(50, Number(req.query.limit) || 25));
-    const names = xs.records.map((r) => r.ticker).filter((t) => (ranks.perTicker[t] || {}).composite != null)
-      .sort((a, b) => (ranks.perTicker[b].composite) - (ranks.perTicker[a].composite)).slice(0, topN);
-    const out = [];
-    for (const t of names) {                       // bounded per-ticker current-score computation
-      try { const built = await buildTickerSignal(t); const sig = built.signal; if (!sig) continue;
-        const v = computeValidated({ current: { score: sig.finalScore, dir: sig.dir, tier: sig.tier }, featureInputs: {}, promotion: PROMOTION });
-        out.push({ ticker: t, current: sig.finalScore, validated: v.validatedScore, delta: v.delta, dir: sig.dir, tier: v.tier });
-      } catch {}
+    if (!c.inflight) {
+      c.inflight = computeRanking(topN)
+        .then((body) => { if (body.available) { c.body = body; c.at = Date.now(); } return body; })
+        .finally(() => { c.inflight = null; });
+      rankingCache.set(topN, c);
     }
-    out.sort((a, b) => (b.validated ?? -1) - (a.validated ?? -1));
-    res.json({ ok: true, available: true, primary: PROMOTION.primary || 'current', promotedFeatures: (PROMOTION.approvedFeatures || []).length, count: out.length, ranked: out, note: (PROMOTION.approvedFeatures || []).length ? 'Ranked by validated score.' : 'No features promoted → validated mirrors current; ranking equals current-score ranking.' });
+    res.json(await c.inflight);
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
+async function computeRanking(topN) {
+  const xs = await buildLiteCrossSection();
+  if (!xs.available) return { ok: true, available: false, reason: 'No cross-sectional universe yet.', ranked: [], count: 0 };
+  const ranks = computeCrossSectional(xs.records, XSEC_FEATURES, { absKeys: XSEC_ABS, compositeKeys: XSEC_FEATURES });
+  const names = xs.records.map((r) => r.ticker).filter((t) => (ranks.perTicker[t] || {}).composite != null)
+    .sort((a, b) => (ranks.perTicker[b].composite) - (ranks.perTicker[a].composite)).slice(0, topN);
+  const out = [];
+  for (const t of names) {                       // bounded per-ticker current-score computation
+    try { const built = await buildTickerSignal(t, { log: false }); const sig = built.signal; if (!sig) continue;
+      const v = computeValidated({ current: { score: sig.finalScore, dir: sig.dir, tier: sig.tier }, featureInputs: {}, promotion: PROMOTION });
+      out.push({ ticker: t, current: sig.finalScore, validated: v.validatedScore, delta: v.delta, dir: sig.dir, tier: v.tier });
+    } catch {}
+  }
+  out.sort((a, b) => (b.validated ?? -1) - (a.validated ?? -1));
+  const body = { ok: true, available: true, primary: PROMOTION.primary || 'current', promotedFeatures: (PROMOTION.approvedFeatures || []).length, count: out.length, ranked: out, note: (PROMOTION.approvedFeatures || []).length ? 'Ranked by validated score.' : 'No features promoted → validated mirrors current; ranking equals current-score ranking.' };
+  return body;
+}
 
 
 // PHASE 4 validated score (runs ALONGSIDE current; current stays primary). Never changes /api/options.

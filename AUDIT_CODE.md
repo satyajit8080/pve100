@@ -12,10 +12,15 @@
 | 7 | Low | Test `phase2-boundary` hard-coded earnings date `2026-08-27`; it went stale and failed (285/286). | Date now relative to today. 286/286 pass. |
 | 8 | Low | `.env.example` set `OPTIONS_PROVIDER` twice and lacked `DASHBOARD_PASSWORD`. | Deduped; added. |
 
-## Not fixed (recommend)
-- **Quota burn / journal pollution:** `GET /api/validated/ranking` runs `buildTickerSignal` sequentially for up to 50 tickers (~10+ UW calls each) on every page view, and each call writes a Signal Journal record via `logSignal`. Cache the ranking and skip logging for non-user-initiated builds.
-- **Dead code:** `callPVE`, `ALIASES`, `N`, empty route table `R`, `/api/explore/markets`, `/api/_inspect` — PVE API was removed; these always return "no key". ~250 lines removable.
-- **Blocking I/O:** `readJournal()` synchronously reads/parses every journal file on each `/api/journal/*` request; `readSignal(id)` loads the whole journal to find one record. Will degrade as logs grow.
-- **Global mutable state:** `READINESS` is overwritten by whichever ticker was scored last; concurrent requests race.
-- **Cookie** lacks `Secure` (fine on localhost; add behind HTTPS). No security headers (CSP, X-Frame-Options).
-- `getCompanies([ticker])` is called per signal build with no cache.
+## Fixed in follow-up
+| # | Issue | Fix |
+|---|-------|-----|
+| 9 | `/api/validated/ranking` ran up to 50 full signal builds (~10+ UW calls each) on every page view and journaled each one. | Cached per limit for 5 min, single in-flight computation, ranking builds no longer written to the Signal Journal. |
+| 10 | `readJournal()` re-read and re-parsed every journal file on each `/api/journal/*` request. | Parse cached; invalidated when any journal file's name/mtime/size changes. Test added. |
+| 11 | `getCompanies([ticker])` (one UW call) on every signal build. | Sector cached 24h per ticker (failures not cached). |
+| 12 | No security headers; cookie never `Secure`; `X-Powered-By` exposed. | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`; `Secure` cookie over HTTPS; opt-in `TRUST_PROXY` for reverse-proxy deploys. |
+
+## Remaining (not bugs)
+- Dead PVE code (`callPVE`, `ALIASES`, `N`, empty route table `R`, `/api/explore/markets`). `/api/_inspect` is still called by the UI's monitor tab, so removal needs a UI change too.
+- `READINESS` shows whichever ticker was scored last (display-only, by design).
+- No CSP: `public/index.html` relies on inline scripts/styles.

@@ -152,3 +152,16 @@ test('journal row + filtering: status reflects resolution state', () => {
 test('journal threshold constant matches the spec (>= 70)', () => {
   assert.equal(JOURNAL_MIN_SCORE, 70);
 });
+
+test('readJournal cache: repeated reads reuse the parse; appended outcomes invalidate it', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jr-'));
+  const rec = mkRec(); rec.explain = explainSignal(rec);
+  fs.writeFileSync(path.join(dir, 'signal-log-2026-08-24.jsonl'), JSON.stringify(rec) + '\n');
+  const a = readJournal(dir);
+  assert.equal(readJournal(dir), a);                                   // unchanged files → cached list
+  await appendOutcome(rec.id, '60m', { status: 'resolved', stockPrice: 104, directionalReturnPct: 4, maxFavorablePct: 4, maxAdversePct: 0 }, dir);
+  const b = readJournal(dir);
+  assert.notEqual(b, a);                                               // new outcome file → re-parsed
+  assert.equal(b[0].outcomes['60m'].directionalReturnPct, 4);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
