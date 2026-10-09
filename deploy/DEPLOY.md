@@ -47,7 +47,7 @@ curl -sI http://127.0.0.1:4000/options-engine.js | head -1
 
 # log in (use YOUR real dashboard password) → cookie jar
 curl -s -c /tmp/pve.cookies -X POST http://127.0.0.1:4000/auth/login \
-  -H 'Content-Type: application/json' -d '{"password":"SatyajitDD7"}' >/dev/null
+  -H 'Content-Type: application/json' -d '{"password":"'"$DASHBOARD_PASSWORD"'"}' >/dev/null
 
 # monitor should show validatedModelVersion + validated.primary=current + promotedFeatures=0
 curl -s -b /tmp/pve.cookies http://127.0.0.1:4000/api/_monitor | head -c 500; echo

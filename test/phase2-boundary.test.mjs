@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 // Capture the REAL fetch for our own HTTP client calls, then stub PVE for the server.
 const real = globalThis.fetch;
+const EARN_DATE = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10); // always 'approaching'
 const J = (o) => ({ ok: true, status: 200, json: async () => o });
 const chain = { data: [
   { right: 'call', strike: 450, expiry: '2026-09-18', volume: 3000, open_interest: 2000, implied_volatility: 0.46, delta: 0.52, gamma: 0.05, theta: -0.01, vega: 0.1, bid: 2, ask: 2.1 },
@@ -35,14 +36,14 @@ globalThis.fetch = async (u, o) => {
   if (s.includes('/historical-risk-reversal-skew')) return J({ data: [{ risk_reversal: 0.02 }] });
   if (s.includes('/volatility/term-structure')) return J({ data: [{ dte: 30, volatility: 0.45 }, { dte: 90, volatility: 0.43 }] });
   if (s.includes('/oi-change')) return J({ data: [{ option_symbol: 'AAPL260918C00450000', curr_oi: 2000, prev_oi: 1500, oi_diff_plain: 500 }] });
-  if (s.includes('/info')) return J({ data: { sector: 'Technology', full_name: 'Apple Inc', next_earnings_date: '2026-08-27' } });
+  if (s.includes('/info')) return J({ data: { sector: 'Technology', full_name: 'Apple Inc', next_earnings_date: EARN_DATE } });
   if (s.includes('/screener/stocks')) return J({ data: [
     { ticker: 'AAPL', sector: 'Technology', full_name: 'Apple', iv_rank: 60, call_premium: '9000000', put_premium: '3000000', net_call_premium: '5000000', net_put_premium: '1000000', marketcap: '3e12' },
     { ticker: 'NVDA', sector: 'Technology', full_name: 'Nvidia', iv_rank: 92, call_premium: '1.2e7', put_premium: '4000000', net_call_premium: '8000000', net_put_premium: '1000000', marketcap: '3e12' },
   ] });
   if (s.includes('/market/sector-tide')) return J({ data: [{ sector: 'Technology', net_premium: 8e8 }, { sector: 'Energy', net_premium: -2e8 }] });
   if (s.includes('/market/market-tide')) return J({ data: { net_call_premium: 1.1e9, net_put_premium: 3e8 } });
-  if (s.includes('/earnings/ticker/')) return J({ data: { next_report_date: '2026-08-27' } });
+  if (s.includes('/earnings/ticker/')) return J({ data: { next_report_date: EARN_DATE } });
   if (s.includes('/volatility/top/iv-rank')) return J(topiv);
   if (s.includes('/companies')) return J(companies);
   if (s.includes('/market/tide/sectors')) return J({ data: [{ sector: 'Technology', net_premium: 8e8 }] });

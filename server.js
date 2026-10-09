@@ -46,8 +46,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const p = path.join(__dirname, '.env');
     if (!fs.existsSync(p)) return;
     for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (!m || process.env[m[1]] !== undefined) continue;
+      let v = m[2];
+      if (/^["']/.test(v)) v = v.replace(/^(["'])(.*)\1.*$/, '$2');   // quoted: keep '#' inside quotes
+      else v = v.replace(/(^|\s)#.*$/, '').trim();                    // unquoted: strip inline comment
+      process.env[m[1]] = v;
     }
   } catch { /* ignore */ }
 })();
@@ -56,7 +60,10 @@ const CONFIG = {
   BASE_URL: null,                      // §18: PVE Trade API removed; UW only
   BASE_URL_REMOVED: 'PVE_TRADE_API_REMOVED',
   AGENT_KEY: '',                       // §18: no PVE agent credentials
-  PASSWORD: process.env.DASHBOARD_PASSWORD || 'SatyajitDD7',
+  // No hard-coded fallback: a password committed to source is public. Without DASHBOARD_PASSWORD a
+  // random one is generated per process and printed to the console at startup.
+  PASSWORD: process.env.DASHBOARD_PASSWORD || crypto.randomBytes(12).toString('base64url'),
+  PASSWORD_GENERATED: !process.env.DASHBOARD_PASSWORD,
   PORT: Number(process.env.PORT || 4000),
   CACHE_TTL_MS: Number(process.env.CACHE_TTL_MS || 8000),
   MIN_UPSTREAM_INTERVAL_MS: Number(process.env.MIN_UPSTREAM_INTERVAL_MS || 1200),
@@ -301,7 +308,7 @@ function verifySession(token) {
 }
 function getCookie(req, name) {
   const h = req.headers.cookie || '';
-  for (const part of h.split(';')) { const [k, ...v] = part.trim().split('='); if (k === name) return decodeURIComponent(v.join('=')); }
+  for (const part of h.split(';')) { const [k, ...v] = part.trim().split('='); if (k === name) { try { return decodeURIComponent(v.join('=')); } catch { return null; } } }
   return null;
 }
 function safeEq(a, b) { const ab = Buffer.from(String(a)); const bb = Buffer.from(String(b)); if (ab.length !== bb.length) return false; try { return crypto.timingSafeEqual(ab, bb); } catch { return false; } }
@@ -315,8 +322,19 @@ function resolveMode() { return 'live'; } // demo mode removed — always live
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
+// Brute-force guard: max 10 failed logins per IP per 15 min.
+const LOGIN_FAILS = new Map();
+const LOGIN_WINDOW_MS = 15 * 60000, LOGIN_MAX_FAILS = 10;
 app.post('/auth/login', (req, res) => {
-  if (!safeEq(req.body?.password || '', CONFIG.PASSWORD)) return res.status(403).json({ error: 'wrong password' });
+  const ip = req.ip || 'unknown', now = Date.now();
+  const f = LOGIN_FAILS.get(ip);
+  if (f && now - f.first < LOGIN_WINDOW_MS && f.count >= LOGIN_MAX_FAILS) return res.status(429).json({ error: 'too many attempts, try later' });
+  if (!safeEq(req.body?.password || '', CONFIG.PASSWORD)) {
+    if (LOGIN_FAILS.size > 10000) LOGIN_FAILS.clear();
+    if (!f || now - f.first >= LOGIN_WINDOW_MS) LOGIN_FAILS.set(ip, { first: now, count: 1 }); else f.count++;
+    return res.status(403).json({ error: 'wrong password' });
+  }
+  LOGIN_FAILS.delete(ip);
   const token = signSession(Date.now() + CONFIG.SESSION_TTL_MS);
   res.setHeader('Set-Cookie', `pve_sess=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CONFIG.SESSION_TTL_MS / 1000)}`);
   res.json({ ok: true, live: !!CONFIG.AGENT_KEY });
@@ -540,6 +558,7 @@ app.get('/api/options/:ticker', requireAuth, async (req, res) => {
   }
   try {
     const built = await buildTickerSignal(ticker);
+    if (!built.ok || !built.chain) return res.json({ ok: false, provider: OPT_PROVIDER.name, status: built.status || 'UNAVAILABLE', reason: built.reason || null, error: built.detail || built.error || 'no options data for ticker', normalized: null });
     const sig = built.signal; const chain = built.chain;
     const contracts = (chain.contracts || []).slice().sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 60);
     res.json({ ok: true, provider: OPT_PROVIDER.name, ts: new Date().toISOString(), signal: sig, chain: { ticker, underlying: chain.underlying, fieldsAvailable: chain.fieldsAvailable, contracts } });
@@ -558,7 +577,7 @@ app.post('/api/ai/analyze/:ticker', requireAuth, async (req, res) => {
   if (hit && (Date.now() - hit.ts) < AI.cfg.cacheTtlMs) return res.json({ ok: true, cached: true, ...hit.payload });
   let built;
   try { built = await buildTickerSignal(ticker); } catch (e) { return res.json({ ok: false, error: 'options data error: ' + e.message }); }
-  if (!built.ok || !built.signal) return res.json({ ok: false, error: built.error || 'no options data for ticker' });
+  if (!built.ok || !built.signal) return res.json({ ok: false, error: built.detail || built.error || 'no options data for ticker' });
   const sig = built.signal;
   // gather real extras for AI context (no fabrication; each optional)
   const extras = { ticker };
@@ -846,7 +865,7 @@ app.get('/api/validated/:ticker', requireAuth, async (req, res) => {
   if (OPT_PROVIDER.name === 'null') return res.json({ ok: false, error: OPT_PROVIDER.reason || 'No options provider configured' });
   try {
     const built = await buildTickerSignal(ticker); const sig = built.signal;
-    if (!sig) return res.json({ ok: false, error: built.error || 'no signal' });
+    if (!sig) return res.json({ ok: false, error: built.detail || built.error || 'no signal' });
     let featureInputs = {}; try { featureInputs = shadowToFeatureInputs(await buildShadowBlock(ticker)); } catch {}
     const validated = computeValidated({ current: { score: sig.finalScore, dir: sig.dir, tier: sig.tier }, featureInputs, promotion: PROMOTION });
     res.json({ ok: true, provider: OPT_PROVIDER.name, ticker, ts: new Date().toISOString(),
@@ -875,5 +894,5 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 export const httpServer = app.listen(CONFIG.PORT, () => {
   console.log(`\n  PVE Signal Engine → http://localhost:${CONFIG.PORT}`);
   console.log(`  Options data: Unusual Whales only (PVE Trade API removed)`);
-  console.log(`  Password: ${CONFIG.PASSWORD === 'SatyajitDD7' ? 'SatyajitDD7 (default — change DASHBOARD_PASSWORD in .env)' : '[custom]'}\n`);
+  console.log(`  Password: ${CONFIG.PASSWORD_GENERATED ? CONFIG.PASSWORD + ' (generated for this run — set DASHBOARD_PASSWORD in .env)' : '[custom]'}\n`);
 });

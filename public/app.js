@@ -468,7 +468,7 @@ function shadowNum(x, d = 0) { return typeof x === 'number' && isFinite(x) ? x.t
 // =====================================================================
 const SIG = { rows: [], meta: null, thr: 0, side: null, q: '', sortKey: 'productionScore', sortDir: -1 };
 const sigNum = (x) => (isNum(x) ? x : null);
-const sigCell = (x, d = '—') => (x == null || x === '' ? d : x);
+const sigCell = (x, d = '—') => (x == null || x === '' ? d : esc(x));
 function sigScoreClass(s) { return !isNum(s) ? 'dim' : s >= 80 ? 'bull' : s >= 65 ? 'bull' : s >= 50 ? '' : s >= 35 ? 'dim' : 'bear'; }
 function sigSignalHtml(sig) { if (sig === 'CALL') return '<b class="bull">CALL</b>'; if (sig === 'PUT') return '<b class="bear">PUT</b>'; if (sig === 'WATCH') return '<span class="dim">WATCH</span>'; return '<span class="dim">—</span>'; }
 function openTickerOptions(t) { if ($('#optTicker')) $('#optTicker').value = t; setTab('options'); }
