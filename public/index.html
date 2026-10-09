@@ -29,8 +29,8 @@
   ::-webkit-scrollbar-track{background:transparent}
 
   /* ---- layout ---- */
-  #app{display:none;grid-template-columns:212px 1fr;grid-template-rows:52px 1fr;height:100vh}
-  header{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0f1720,#0c141b)}
+  #app{display:none;grid-template-columns:1fr;grid-template-rows:auto 1fr;height:100vh}
+  header{grid-column:1;flex-wrap:wrap;min-height:56px;position:relative;z-index:2;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0f1720,#0c141b)}
   .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
   .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--bull);box-shadow:0 0 0 0 var(--bull);animation:pulse 2.4s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,214,176,.5)}70%{box-shadow:0 0 0 7px rgba(47,214,176,0)}100%{box-shadow:0 0 0 0 rgba(47,214,176,0)}}
@@ -49,7 +49,7 @@
   nav .navbtn.spot.active{box-shadow:inset 2px 0 0 var(--bull)}
   nav .foot{margin-top:auto;padding:10px 8px;font-size:10.5px;color:var(--dim);border-top:1px solid var(--line)}
 
-  main{grid-row:2;overflow:auto;padding:18px 20px 40px}
+  main{grid-row:2;overflow:auto;padding:18px 20px 40px;position:relative;z-index:1}
   .maph{display:none;align-items:center;gap:10px;background:#0f1a24;border:1px solid var(--line);color:var(--muted);padding:8px 12px;border-radius:var(--r);margin-bottom:14px;font-size:12px}
   .maph.show{display:flex}
   .maph button{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;font-size:11px}
@@ -244,6 +244,51 @@
 @media(max-width:1100px){.simGrid{grid-template-columns:1fr 1fr}.simEngine{grid-row:span 1}}
 @media(max-width:760px){.simGrid{grid-template-columns:1fr}.simWrap{min-height:0}.simStatus{margin-left:0;text-align:left}.simStats{justify-content:flex-start}.simRun{justify-content:flex-start}.simTitle{font-size:21px}.simSplit{grid-template-columns:1fr}}
 
+/* ===== Single menu (segmented, sliding indicator) ===== */
+.seg{position:relative;display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:#0b131a}
+.seg .navbtn{position:relative;z-index:1;background:transparent;border:0;color:var(--muted);padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;transition:color .25s}
+.seg .navbtn:hover{color:var(--text)}
+.seg .navbtn.active{color:#fff}
+.seg-ind{position:absolute;top:3px;bottom:3px;left:3px;width:0;border-radius:999px;background:linear-gradient(135deg,var(--accent),#38bdf8);box-shadow:0 4px 18px -4px rgba(124,123,255,.7);transition:transform .38s cubic-bezier(.3,1.3,.5,1),width .38s cubic-bezier(.3,1.3,.5,1)}
+.iconbtn{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:14px;transition:transform .2s,border-color .2s,color .2s}
+.iconbtn:hover{transform:rotate(30deg);border-color:var(--accent)}
+.iconbtn.active{border-color:var(--accent);color:var(--accent)}
+
+/* ===== Motion ===== */
+body{background:radial-gradient(900px 500px at 10% -10%,rgba(124,123,255,.10),transparent 60%),radial-gradient(800px 500px at 110% 10%,rgba(56,189,248,.08),transparent 60%),var(--ink);background-attachment:fixed}
+body::before{content:"";position:fixed;inset:-50%;z-index:0;pointer-events:none;background:conic-gradient(from 0deg at 50% 50%,rgba(124,123,255,.05),rgba(47,214,176,.04),rgba(56,189,248,.05),rgba(124,123,255,.05));filter:blur(60px);animation:spin 40s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+header{backdrop-filter:blur(10px);background:linear-gradient(180deg,rgba(15,23,32,.85),rgba(12,20,27,.75))}
+.page.active{animation:pageIn .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pageIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
+.card{transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease}
+.card:hover{border-color:#2b3d4b;box-shadow:0 12px 32px -18px rgba(0,0,0,.8)}
+.btn{transition:transform .15s ease,filter .2s ease,box-shadow .2s ease;background-image:linear-gradient(135deg,var(--accent),#5b8cff)}
+.btn.ghost{background-image:none}
+.btn:hover{filter:brightness(1.12);box-shadow:0 6px 20px -8px rgba(124,123,255,.8)}
+.btn:active{transform:scale(.96)}
+.btn:disabled{opacity:.55;cursor:default}
+.chip{transition:all .2s ease}
+.chip:hover{transform:translateY(-1px);border-color:#3a4c5c;color:var(--text)}
+#sigTable tbody tr{animation:rowIn .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(min(var(--i,0),40) * 18ms);transition:background .15s}
+#sigTable tbody tr:hover{background:rgba(124,123,255,.07)}
+#sigTable tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+@keyframes rowIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+#sigTop .chip{animation:popIn .45s cubic-bezier(.3,1.4,.5,1) both}
+#sigTop .chip:nth-child(2){animation-delay:.06s}#sigTop .chip:nth-child(3){animation-delay:.12s}#sigTop .chip:nth-child(4){animation-delay:.18s}#sigTop .chip:nth-child(5){animation-delay:.24s}
+@keyframes popIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
+.score-hi{text-shadow:0 0 12px currentColor;animation:glow 2.4s ease-in-out infinite}
+@keyframes glow{50%{text-shadow:0 0 2px currentColor}}
+.loading{position:relative;color:transparent!important;border-radius:6px;min-height:14px;background:linear-gradient(90deg,#111b23 25%,#1b2a36 50%,#111b23 75%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.modal.show{animation:fadeIn .2s ease both}
+.modal.show .sheet{animation:sheetIn .35s cubic-bezier(.2,1.2,.4,1) both}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes sheetIn{from{opacity:0;transform:translateY(24px) scale(.97)}}
+.lbox{animation:sheetIn .6s cubic-bezier(.2,1.2,.4,1) both;box-shadow:0 30px 80px -30px rgba(124,123,255,.45)}
+#jrBody>*{animation:pageIn .4s ease both}
+@media (max-width:760px){header{gap:10px;padding:8px 12px}.seg{order:5;width:100%;justify-content:space-between}.seg .navbtn{flex:1;padding:6px 8px}#pillData,#pillScan{display:none}main{padding:14px 12px 30px}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -261,31 +306,21 @@
 <div id="app">
   <header>
     <div class="brand"><span class="dot"></span> PVE SIGNAL ENGINE</div>
+    <div class="seg" id="menu" role="tablist" aria-label="Signal Engine">
+      <span class="seg-ind" id="segInd"></span>
+      <button class="navbtn active" data-tab="signals" role="tab">Live Signals</button>
+      <button class="navbtn" data-tab="options" role="tab">Ticker Analysis</button>
+      <button class="navbtn" data-tab="journal" role="tab">Journal</button>
+    </div>
     <div class="spacer"></div>
     <span class="pill" id="pillConn"><span class="s"></span><span id="connTxt">connecting…</span></span>
     <span class="pill" id="pillData"><span class="s"></span>src: <b id="srcTxt">—</b></span>
     <span class="pill" id="pillScan"><span class="s"></span>scan <b id="scanTxt">—</b></span>
+    <button class="modebtn iconbtn" data-tab="health" title="System health">◉</button>
+    <button class="modebtn iconbtn" data-tab="settings" title="Settings">⚙</button>
     <button class="modebtn" id="logoutBtn">Logout</button>
   </header>
 
-  <nav>
-    <div class="navhdr" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin:6px 10px 2px">Signal Terminal · US only</div>
-    <button class="navbtn active" data-tab="dashboard">Overview</button>
-    <button class="navbtn spot" data-tab="scanner">Fast US Stock Signals <span class="k">core</span></button>
-    <button class="navbtn spot" data-tab="signals">US Options Signals <span class="k">live</span></button>
-    <button class="navbtn" data-tab="options">US Options</button>
-    <button class="navbtn" data-tab="backtest">Backtest</button>
-    <button class="navbtn" data-tab="replay">Replay</button>
-    <button class="navbtn" data-tab="research">Feature Research</button>
-    <button class="navbtn" data-tab="history">Signal History</button>
-    <button class="navbtn spot" data-tab="journal">Signal Journal <span class="k">learning</span></button>
-    
-    <div class="navhdr" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin:12px 10px 2px">System</div>
-    <button class="navbtn" data-tab="monitor">Raw API / Data Monitor</button>
-    <button class="navbtn" data-tab="health">System Health</button>
-    <button class="navbtn" data-tab="settings">API Configuration</button>
-    <div class="foot">Unusual Whales options data.<br>Scores = ranking, not P(profit).<br>Not financial advice.</div>
-  </nav>
 
   <main>
     <div class="maph" id="maph">
@@ -294,7 +329,7 @@
     </div>
 
     <!-- DASHBOARD -->
-    <section class="page active" data-page="dashboard">
+    <section class="page" data-page="dashboard">
       <div id="overviewSim"></div>
     </section>
 
@@ -358,7 +393,7 @@
     <!-- US STOCK SIGNALS -->
 
     <!-- US OPTIONS SIGNALS (ranked scan: production + shadow) -->
-    <section class="page" data-page="signals">
+    <section class="page active" data-page="signals">
       <div class="scanhead"><h2>US Options Signals</h2><div class="scanline"></div><span class="dim mono" id="sigMeta"></span></div>
       <p class="muted" style="margin-top:0;font-size:12.5px">Ranked by the <b>production</b> options score (the live authority). The <b>shadow</b> score is validation-only and never changes it. <b>Confidence</b> is a data/conviction measure, not a probability of profit. Auto-refreshed every 5 min during US market hours; click any row for the full options breakdown. Scores here are the <b>last scan snapshot</b>; opening a ticker recomputes it <b>live</b>, so the two can differ slightly.</p>
       <div class="toolbar">

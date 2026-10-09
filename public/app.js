@@ -26,7 +26,7 @@ const state = {
   mode: 'live', liveAvailable: false, baseUrl: '',
   signals: new Map(), history: loadHistory(), lastPrice: {}, hist: {}, classify: null, snapshots: loadSnaps(),
   ctx: { flow: null, spikes: [], traders: [], markets: [], volMed: 1, liqMed: 1, snapshotTs: 0, marketHist: {} },
-  ui: { tab: 'dashboard', thr: 0, sides: new Set(), filter: '', minVol: 0, monView: 'raw', monEndpoint: '', btSplit: 'all' },
+  ui: { tab: 'signals', thr: 0, sides: new Set(), filter: '', minVol: 0, monView: 'raw', monEndpoint: '', btSplit: 'all' },
   scanning: false, lastScan: 0, connErr: '', suppressed: 0, lowQ: 0,
 };
 function loadHistory() { try { return JSON.parse(localStorage.getItem('pve_history') || '[]'); } catch { return []; } }
@@ -494,12 +494,12 @@ function renderSigTable() {
   const th = cols.map(([k, label, a]) => `<th data-sortk="${k}" style="text-align:${a === 'r' ? 'right' : 'left'};cursor:pointer;padding:6px 10px;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.12);font-size:11px;color:#9aa" >${esc(label)}${arrow(k)}</th>`).join('');
   const agreeCls = (a) => (a === 'HIGH' ? 'bull' : a === 'DIVERGENCE' ? 'bear' : a === 'INSUFFICIENT' ? 'dim' : '');
   const biasCls = (b) => (b === 'STRONG' || b === 'BULLISH' ? 'bull' : b === 'BEARISH' ? 'bear' : b === 'AVOID' ? 'bear' : 'dim');
-  const body = rows.map((r) => {
+  const body = rows.map((r, i) => {
     const chg = isNum(r.changePct) ? `<span class="${r.changePct >= 0 ? 'bull' : 'bear'}">${r.changePct >= 0 ? '+' : ''}${r.changePct}%</span>` : '—';
     const delta = isNum(r.scoreDelta) ? `<span class="${r.scoreDelta > 0 ? 'bull' : r.scoreDelta < 0 ? 'bear' : 'dim'}">${r.scoreDelta > 0 ? '+' : ''}${r.scoreDelta}</span>` : '—';
-    return `<tr data-tkr="${esc(r.ticker)}" style="cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">
+    return `<tr data-tkr="${esc(r.ticker)}" style="--i:${i};cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">
       <td style="padding:6px 10px;font-weight:600">${esc(r.ticker)}</td>
-      <td style="padding:6px 10px;text-align:right"><b class="${sigScoreClass(r.productionScore)}">${sigCell(r.productionScore)}</b></td>
+      <td style="padding:6px 10px;text-align:right"><b class="${sigScoreClass(r.productionScore)}${r.productionScore >= 80 ? ' score-hi' : ''}" data-count="${r.productionScore}">${sigCell(r.productionScore)}</b></td>
       <td style="padding:6px 10px;text-align:right" class="dim">${sigCell(r.shadowScore)}</td>
       <td style="padding:6px 10px;text-align:right">${delta}</td>
       <td style="padding:6px 10px" class="${agreeCls(r.engineAgreement)}" >${sigCell(r.engineAgreement)}</td>
@@ -517,6 +517,7 @@ function renderSigTable() {
   $('#sigTable').innerHTML = rows.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`
     : '<div class="dim" style="padding:24px;text-align:center">No signals match the current filters.</div>';
+  animateCounts($('#sigTable'));
   $$('#sigTable th[data-sortk]').forEach((h) => h.onclick = () => { const k = h.dataset.sortk; if (SIG.sortKey === k) SIG.sortDir *= -1; else { SIG.sortKey = k; SIG.sortDir = (k === 'ticker' ? 1 : -1); } renderSigTable(); });
   $$('#sigTable tr[data-tkr]').forEach((tr) => tr.onclick = () => openTickerOptions(tr.dataset.tkr));
 }
@@ -740,6 +741,7 @@ function renderSigTop() {
 }
 async function renderSignals() {
   $('#sigStatus').textContent = 'loading signals…';
+  if (!$('#sigTable').innerHTML) $('#sigTable').innerHTML = '<div class="loading" style="height:220px"></div>';
   let r; try { r = await api('/signals/us', { limit: 500 }); } catch (e) { r = { ok: false, error: e.message }; }
   if (!r || !r.ok) { $('#sigStatus').innerHTML = `<span class="bear">${esc((r && r.error) || 'unavailable')}</span>`; $('#sigTable').innerHTML = ''; $('#sigTop').innerHTML = ''; return; }
   if (!r.available) {
@@ -932,9 +934,29 @@ function startOverviewSim() {
 }
 function stopOverviewSim() { if (OV_SIM) { OV_SIM.destroy(); OV_SIM = null; const r = $('#overviewSim'); if (r) r.innerHTML = ''; } }
 
+// Sliding indicator under the active item of the single top menu.
+function moveSegInd() {
+  const ind = $('#segInd'), on = $('#menu .navbtn.active');
+  if (!ind) return;
+  if (!on) { ind.style.width = '0px'; return; }
+  ind.style.width = on.offsetWidth + 'px';
+  ind.style.transform = `translateX(${on.offsetLeft - 3}px)`;
+}
+window.addEventListener('resize', () => moveSegInd());
+// Count numbers up from 0 for elements marked [data-count] (skipped when reduced motion is preferred).
+function animateCounts(root) {
+  if (!root || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  root.querySelectorAll('[data-count]').forEach((el) => {
+    const end = Number(el.dataset.count); if (!Number.isFinite(end)) return;
+    const t0 = performance.now(), dur = 700;
+    const step = (t) => { const k = Math.min(1, (t - t0) / dur); el.textContent = Math.round(end * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+}
 function setTab(t) {
   state.ui.tab = t;
-  $$('.navbtn').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  $$('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  moveSegInd();
   $$('.page').forEach((p) => p.classList.toggle('active', p.dataset.page === t));
   if (t === 'monitor') renderMonitor();
   if (t === 'settings') { renderSettings(); renderApiConfig(); }
@@ -953,7 +975,7 @@ function wire() {
   $('#logoutBtn').onclick = doLogout;
   $('#maphX').onclick = () => { $('#maph').classList.remove('show'); localStorage.setItem('pve_maph', '1'); };
   if (!localStorage.getItem('pve_maph')) $('#maph').classList.add('show');
-  $$('.navbtn').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
+  $$('[data-tab]').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
   $$('[data-bt]').forEach((c) => c.onclick = () => { $$('[data-bt]').forEach((x) => x.classList.remove('on')); c.classList.add('on'); state.ui.btSplit = c.dataset.bt; renderBacktest(); });
   if ($('#optGo')) $('#optGo').onclick = () => renderOptions();
   $$('[data-sigthr]').forEach((c) => c.onclick = () => { $$('[data-sigthr]').forEach((x) => x.classList.remove('on')); c.classList.add('on'); SIG.thr = Number(c.dataset.sigthr); renderSigTop(); renderSigTable(); });
@@ -990,7 +1012,7 @@ let tick = null;
 function start() {
   $('#login').style.display = 'none'; $('#app').style.display = 'grid';
   renderPills(); renderSettings(); scan(); restartLoop();
-  if (state.ui.tab === 'dashboard' || !state.ui.tab) startOverviewSim();   // Overview is the default tab
+  setTab(state.ui.tab || 'signals');   // single menu: Live Signals is the default view
   if (tick) clearInterval(tick); tick = setInterval(() => { $('#scanTxt').textContent = state.lastScan ? hhmmss(state.lastScan) : '—'; }, 1000);
 }
 async function boot() { wire(); const s = await checkStatus(); if (s.authed) start(); else showLogin(); }
